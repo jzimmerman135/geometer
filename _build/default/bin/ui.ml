@@ -2,95 +2,124 @@ open Base
 open Raylib
 module Vec2 = Raylib.Vector2
 
-let get_mouse_pos () = (get_mouse_x (), get_mouse_y ())
-
 let empty =
   {
-    mouse_pos = get_mouse_pos ();
-    selected = [];
+    mousepos = (get_mouse_x (), get_mouse_y ());
+    selected = NoSelection;
     mode = InkMode;
-    mousedrag_startpos = None;
-    is_metameta_mode = false;
+    input = Nothing;
   }
 
-let refresh ({ mode; selected; mousedrag_startpos; _ } as ui) world :
-    ui * uiaction =
-  (* utils *)
-  let getids pts = List.map fst pts in
-  let movept (startx, starty) (stopx, stopy) (id, (px, py)) =
-    (id, (px + stopx - startx, py + stopy - starty))
+let poll ui world =
+  let mousepos = (get_mouse_x (), get_mouse_y ()) in
+  let mode =
+    let m_key_pressed = is_key_pressed Key.M in
+    match ui.mode with
+    (* M key toggles meta-meta mode *)
+    | MetaMetaMode m when m_key_pressed -> m
+    | m when m_key_pressed -> MetaMetaMode m
+    (* No M key and no right click, do nothing *)
+    | m when not (is_mouse_button_pressed MouseButton.Right) -> m
+    (* Right mouse clicked, this toggles ink and meta-ink *)
+    | InkMode -> MetaInkMode
+    | MetaInkMode -> InkMode
+    | MetaMetaMode InkMode -> MetaMetaMode MetaInkMode
+    | MetaMetaMode MetaInkMode -> MetaMetaMode InkMode
+    | MetaMetaMode (MetaMetaMode _) -> raise (Failure "meta-meta (meta-meta)")
   in
+  let input =
+    let contacts_point pred pos =
+      let contact_radius = Int.of_float point_highlight_size in
+      let makes_contact (x1, y1) (x2, y2) =
+        abs (x1 - x2) < contact_radius && abs (y1 - y2) < contact_radius
+      in
+      let at (_, pos') = makes_contact pos pos' in
+      IdMap.to_seq world.points |> Seq.find (fun pt -> pred pt && at pt)
+    in
+    let contacts_any_point = contacts_point (fun _ -> true) in
+    let mousedown = is_mouse_button_down MouseButton.Left in
+    let mousereleased = is_mouse_button_released MouseButton.Left in
+    let shiftdown = is_key_down Key.Left_shift || is_key_down Key.Right_shift in
+    match (ui.input, contacts_any_point mousepos) with
+    (* Keypresses *)
+    | _, _ when is_key_pressed Key.Backspace -> Delete
+    | _, _ when is_key_pressed Key.Left -> Undo
+    | _, _ when is_key_pressed Key.Right -> Redo
+    (* Stop drag when mouse released *)
+    | DraggingFrom origin, _ when mousereleased ->
+        DragReleasedFrom (origin, mousepos)
+    (* If mouse is not down *)
+    | _, _ when not mousedown -> Nothing
+    (* Left mouse is down, but wasn't previously *)
+    | Nothing, Some pt when shiftdown -> Clicked (Shift, Point pt)
+    | Nothing, None when shiftdown -> Clicked (Shift, EmptySpace mousepos)
+    | Nothing, Some pt -> Clicked (Plain, Point pt)
+    | Nothing, None -> Clicked (Plain, EmptySpace mousepos)
+    (* Left mouse is down and was previously dragging *)
+    | DraggingFrom place, _ | Clicked place, _ -> DraggingFrom place
+    (* Otherwise back to nothing *)
+    | RightClicked, _
+    | Delete, _
+    | Undo, _
+    | Redo, _
+    | DragReleasedFrom (_, _), _ ->
+        Nothing
+  in
+  { ui with mousepos; mode; input }
+
+let action world ui : ui * uiaction =
+  let movept (diffx, diffy) (id, (px, py)) = (id, (px + diffx, py + diffy)) in
+  let diffpt (fromx, fromy) (tox, toy) = (tox - fromx, toy - fromy) in
+  let shiftpt start stop : point -> point = diffpt start stop |> movept in
   let genmoves (pts : point list) (start : position) (stop : position) =
-    let genmove ((id, pos) as pt) =
-      let _, newpos = movept start stop pt in
-      MovePoint (id, pos, newpos)
+    let genmove ((id, _) as pt) =
+      MovePoint (id, shiftpt start stop pt |> snd)
     in
     List.map genmove pts
   in
-  let contacts_point pred pos =
-    let point_size = Int.of_float point_size in
-    let makes_contact (x1, y1) (x2, y2) =
-      abs (x1 - x2) < point_size && abs (y1 - y2) < point_size
-    in
-    let at (_, pos') = makes_contact pos pos' in
-    IdMap.to_seq world.points |> Seq.find (fun pt -> pred pt && at pt)
-  in
-  let contacts_any_point = contacts_point (fun _ -> true) in
-
-  (* polling user *)
-  let mouse_pos = get_mouse_pos () in
-  let shift_down = is_key_down Key.Left_shift || is_key_down Key.Right_shift in
-  let mouse_down = is_mouse_button_down MouseButton.Left in
-  let mouse_released = is_mouse_button_released MouseButton.Left in
-  let point_under_mouse = contacts_any_point mouse_pos in
-  if is_key_down Key.U then
-    print_endline
-      ("point_under_mouse: "
-      ^
-      match point_under_mouse with
-      | Some (id, pos) -> Int.to_string id ^ " " ^ pos_to_string pos
-      | None -> "none");
-
-  (* pre-update UI *)
-  let mode =
-    match mode with
-    | mode when not (is_mouse_button_pressed MouseButton.Right) -> mode
-    | InkMode -> MetaInkMode
-    | MetaInkMode -> InkMode
-  in
-  let ui = { ui with mouse_pos; mode } in
-
-  (* let contacts_inkpoint world = *)
-  (*   contacts_point (fun (id, _) -> IdMap.find_opt id world.colors = Some Ink) *)
-  (* in *)
-  (* let contacts_metapoint world = *)
-  (*   contacts_point (fun (id, _) -> *)
-  (*       IdMap.find_opt id world.colors = Some MetaInk) *)
-  (* in *)
   let selected, action =
-    match (mode, selected, mousedrag_startpos, point_under_mouse) with
-    | InkMode, [], _, None when shift_down && mouse_down ->
+    match (ui.input, ui.selected) with
+    (* deleting points *)
+    | Delete, Selected pts ->
+        let deletept pt = DeletePoint pt in
+        (NoSelection, Seq (List.map deletept pts))
+    (* start active selection drag *)
+    | Clicked (Plain, EmptySpace _), NoSelection
+    | Clicked (Plain, EmptySpace _), Selected _ ->
+        (ActivelySelecting [], NoAction)
+    (* maintiain active selection drag *)
+    | DraggingFrom (Plain, EmptySpace pos), ActivelySelecting _ ->
+        ( ActivelySelecting (World.points_in_rect world pos ui.mousepos),
+          NoAction )
+    (* release from active selection drag *)
+    | DragReleasedFrom _, ActivelySelecting (_ :: _ as xs) ->
+        (Selected xs, NoAction)
+    | DragReleasedFrom _, ActivelySelecting [] -> (NoSelection, NoAction)
+    (* released while selection *)
+    | DragReleasedFrom ((Plain, Point (_, startpos)), endpos), Selected pts ->
+        ( Selected (List.map (shiftpt startpos endpos) pts),
+          Seq (genmoves pts startpos endpos) )
+    (* selecting a point *)
+    | Clicked (Plain, Point pt), NoSelection -> (Selected [ pt ], NoAction)
+    | Clicked (Plain, Point pt), Selected pts when not (List.mem pt pts) ->
+        (Selected [ pt ], NoAction)
+    (* adding a point *)
+    | Clicked (Shift, EmptySpace pos), NoSelection ->
         let id = World.idgen () in
-        ( [ (id, mouse_pos) ],
-          Seq [ AddPoint (id, mouse_pos); HighlightAll [ id ] ] )
-    (* move case *)
-    | _, (_ :: _ as pts), None, None when mouse_down ->
-        (pts, Seq [ HighlightAll (getids pts) ])
-    (* endmove case *)
-    | _, (_ :: _ as pts), Some dragstart, _ when mouse_released ->
-        ( List.map (movept dragstart mouse_pos) pts,
-          Seq (HighlightAll (getids pts) :: genmoves pts dragstart mouse_pos) )
-    (* Just keep selected *)
-    | _, (_ :: _ as pts), _, _ -> (pts, HighlightAll (getids pts))
-    (* base case *)
-    | _, [], _, _ -> ([], NoAction)
+        (Selected [ (id, pos) ], AddPoint (id, pos))
+    | Clicked (Shift, EmptySpace pos), Selected pts ->
+        let id = World.idgen () in
+        (Selected ((id, pos) :: pts), AddPoint (id, pos))
+    (* moving a point *)
+    | DraggingFrom (Plain, Point (id, startpos)), Selected pts
+      when List.mem_assoc id pts ->
+        print_endline "here";
+        (Selected pts, Seq (genmoves pts startpos ui.mousepos))
+    (* start drawing a line *)
+    | Clicked (Shift, Point pt), Selected _ -> (Selected [ pt ], NoAction)
+    | Clicked (Shift, Point pt), NoSelection -> (Selected [ pt ], NoAction)
+    (* no interaction *)
+    | _, Selected pts -> (Selected pts, NoAction)
+    | _ -> (NoSelection, NoAction)
   in
-
-  (* post-update ui *)
-  let mousedrag_startpos =
-    match mousedrag_startpos with
-    | None when mouse_down -> Some mouse_pos
-    | Some _ when mouse_released -> None
-    | drag -> drag
-  in
-  ({ ui with selected; mousedrag_startpos }, action)
+  ({ ui with selected }, action)

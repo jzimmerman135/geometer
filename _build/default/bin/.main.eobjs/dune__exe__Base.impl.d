@@ -1,1 +1,1 @@
-bin/base.ml: Bool Color Int Key List Map MouseButton Raylib Set String
+bin/base.ml: Color Int Key List Map Raylib Set String

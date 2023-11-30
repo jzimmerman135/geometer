@@ -10,7 +10,8 @@ let red : Color.t = Color.create 0xf6 0x72 0x80 0xff
 let green : Color.t = Color.create 0x6A 0x9C 0x89 0xff
 let highlight = Color.create 20 208 222
 let highlight_em = Color.create 20 130 140 0xff
-let point_size = 10.0
+let point_size = 6.0
+let point_highlight_size = 14.0
 
 (* WORLD *)
 
@@ -28,25 +29,41 @@ type world = { points : pointmap; lines : linemap; colors : stuffmap }
 
 (* UI *)
 
-type mode = InkMode | MetaInkMode
+type mode = InkMode | MetaInkMode | MetaMetaMode of mode
 
-type selected = point list
+and selection =
+  | NoSelection
+  | Selected of point list
+  | ActivelySelecting of point list
+
 and point = id * position
 
+type user_action =
+  | Clicked of clickorigin
+  | DraggingFrom of clickorigin
+  | DragReleasedFrom of clickorigin * position
+  | RightClicked
+  | Delete
+  | Undo
+  | Redo
+  | Nothing
+
+and clickorigin = whichclick * place
+and whichclick = Plain | Shift
+and place = EmptySpace of position | Point of point
+
 type ui = {
-  mouse_pos : int * int;
-  selected : selected;
+  mousepos : int * int;
+  selected : selection;
   mode : mode;
-  is_metameta_mode : bool;
-  mousedrag_startpos : position option;
+  input : user_action;
 }
 
 type uiaction =
-  | HighlightAll of id list
-  | HighlightQuad of position * position
-  | AddPoint of id * position
-  | MovePoint of id * position * position
-  (* | AddLine of id * id *)
+  | AddPoint of point
+  | MovePoint of id * position
+  | AddLine of id * id
+  | DeletePoint of point
   (* | AddMetaPoint of id * position *)
   (* | AddMetaLine of id * id *)
   | Seq of uiaction list
@@ -58,29 +75,57 @@ let pos_to_string (x, y) = "(" ^ Int.to_string x ^ ", " ^ Int.to_string y ^ ")"
 let point_to_string (id, pos) =
   "id: " ^ Int.to_string id ^ "pos: " ^ pos_to_string pos
 
-let ui_to_string
-    { selected; mode; is_metameta_mode; mouse_pos; mousedrag_startpos } =
-  let state_string =
+let ui_to_string { selected; mode; mousepos; input } =
+  let open String in
+  let clkstr = function Plain -> "" | Shift -> "shift " in
+  let plcstr = function
+    | Point pt -> point_to_string pt
+    | EmptySpace pos -> pos_to_string pos
+  in
+  let input_str =
+    match input with
+    | Nothing -> "nothing"
+    | RightClicked -> "right click"
+    | Clicked (clk, place) -> clkstr clk ^ "clicked" ^ plcstr place
+    | DraggingFrom (cl, place) -> clkstr cl ^ "dragging from " ^ plcstr place
+    | Delete -> "delete"
+    | Undo -> "undo"
+    | Redo -> "redo"
+    | DragReleasedFrom ((cl, place), stop) ->
+        clkstr cl
+        ^ concat " "
+            [
+              plcstr place;
+              "drag released from";
+              plcstr place;
+              "to";
+              pos_to_string stop;
+            ]
+  in
+  let mode_str =
+    match mode with
+    | InkMode -> "ink"
+    | MetaInkMode -> "meta-ink"
+    | MetaMetaMode InkMode -> "ink (meta-meta)"
+    | MetaMetaMode MetaInkMode -> "meta-ink (meta-meta)"
+    | MetaMetaMode (MetaMetaMode _) ->
+        raise (Failure "unreacheable meta-meta (meta-meta)")
+  in
+  let mousepos_str = pos_to_string mousepos in
+  let selected_str =
     match selected with
-    | [] -> "No selection"
-    | pts ->
-        "Selected [" ^ String.concat "," (List.map point_to_string pts) ^ "]"
+    | NoSelection -> "none"
+    | Selected pts ->
+        "selected: [" ^ concat ", " (List.map point_to_string pts) ^ "]"
+    | ActivelySelecting pts ->
+        "actively selecting: ["
+        ^ concat ", " (List.map point_to_string pts)
+        ^ "]"
   in
-  let mode_string =
-    match mode with InkMode -> "ink" | MetaInkMode -> "meta-ink"
-  in
-  let mousedrag_string =
-    match mousedrag_startpos with
-    | Some pos -> pos_to_string pos
-    | None -> "No drag"
-  in
-  String.concat "\n"
+  concat "\n"
     [
-      "state: " ^ state_string;
-      "mode: " ^ mode_string;
-      "mousepos: " ^ pos_to_string mouse_pos;
-      "mousedrag_startpos: " ^ mousedrag_string;
-      "meta-meta: " ^ Bool.to_string is_metameta_mode;
-      "shift_down: " ^ Bool.to_string (is_shift is_key_down);
-      "mouse_down: " ^ Bool.to_string (is_mouse_button_down MouseButton.Left);
+      "input: " ^ input_str;
+      "mode: " ^ mode_str;
+      "mousepos: " ^ mousepos_str;
+      "selected: " ^ selected_str;
     ]
