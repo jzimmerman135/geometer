@@ -2,27 +2,21 @@
 
 ## UI Controls
 
+#### Actions
+
 - Right-click to switch mode
 
-#### Select-mode (pseudo-mode, active when no selection)
-
-- Click on anything to select
+- Click on anything to select it
   - Drag to move it
-- Drag over a region to select it
+- Drag over a region to select all things in that regions
 
-#### Visual-mode (pseudo-mode, active when selection)
-
-- Click to begin move
-  - Stays when mouse released, reverts to select-mode
-
-#### Ink-mode
+  - Drag to move them
 
 - Shift-click on a blank location adds an ink point
 - Shift-click on an ink point begins a line
+
   - If mouse is released on another ink point, it stays
   - If mouse is released elsewhere, it disappears
-
-#### Meta-mode
 
 - Shift-click on a blank location adds a combinator
 - Shift-click on a point begins a meta-line
@@ -40,3 +34,41 @@ Contains:
 
 - Points { Id -> Position, Color }
 - Lines { Id -> (Id, Id), Color }
+
+# Implementation
+
+```
+Input UI:
+In InkMode,
+Selected is Nothing,
+DragStart is None,
+LeftMouse is down,
+LeftMouse is over nothing.
+
+Actions:
+--> Id is Idgen ()
+--> AddPoint (Id, MousePos)
+--> HighlightPoint [Id]
+
+Output UI:
+--> DragStart is MousePos
+--> Selected is [Id]
+```
+
+```
+Input UI:
+In InkMode,
+Selected is Some,
+DragStart is None,
+LeftMouse is down,
+LeftMouse is over nothing.
+
+Actions:
+--> Id is Idgen ()
+--> AddPoint (Id, MousePos)
+--> HighlightPoint [Id :: Some]
+
+Output UI:
+--> DragStart is MousePos
+--> Selected is [Id :: Some]
+```

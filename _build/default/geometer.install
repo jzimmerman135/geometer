@@ -1,0 +1,8 @@
+lib: [
+  "_build/install/default/lib/geometer/META"
+  "_build/install/default/lib/geometer/dune-package"
+  "_build/install/default/lib/geometer/opam"
+]
+bin: [
+  "_build/install/default/bin/geometer"
+]
