@@ -2,21 +2,26 @@
 
 ## UI Controls
 
-#### Actions
+## Actions
 
 - Right-click to switch mode
+
+#### Select-state
 
 - Click on anything to select it
   - Drag to move it
 - Drag over a region to select all things in that regions
-
   - Drag to move them
 
-- Shift-click on a blank location adds an ink point
+#### InkMode Insert state
+
+- Shift-click on a blank location adds an ink point, and selects it
 - Shift-click on an ink point begins a line
 
   - If mouse is released on another ink point, it stays
   - If mouse is released elsewhere, it disappears
+
+#### MetaMode Insert state
 
 - Shift-click on a blank location adds a combinator
 - Shift-click on a point begins a meta-line

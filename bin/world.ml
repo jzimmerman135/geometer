@@ -36,5 +36,6 @@ let rec update world (action : uiaction) : world =
   match action with
   | Seq actions -> List.fold_left update world actions
   | AddPoint (id, pos) -> add_point id pos world
-  | MovePoint (id, pos) when IdMap.mem id world.points -> add_point id pos world
+  | MovePoint (id, _, newpos) when IdMap.mem id world.points ->
+      add_point id newpos world
   | _ -> world

@@ -19,6 +19,7 @@ let rec loop (world, ui) =
     if is_key_down Key.U then print_endline (ui_to_string ui);
     let ui', action = Ui.refresh ui world in
     let world' = World.update world action in
+
     Render.draw_ui ui';
     Render.draw_action world' action;
     Render.draw_world world';

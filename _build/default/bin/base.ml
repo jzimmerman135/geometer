@@ -10,7 +10,7 @@ let red : Color.t = Color.create 0xf6 0x72 0x80 0xff
 let green : Color.t = Color.create 0x6A 0x9C 0x89 0xff
 let highlight = Color.create 20 208 222
 let highlight_em = Color.create 20 130 140 0xff
-let point_size = 6.0
+let point_size = 10.0
 
 (* WORLD *)
 
@@ -30,12 +30,12 @@ type world = { points : pointmap; lines : linemap; colors : stuffmap }
 
 type mode = InkMode | MetaInkMode
 
-type state = NoSelection | Selected of id list
-and selection = IdSet.t
+type selected = point list
+and point = id * position
 
 type ui = {
   mouse_pos : int * int;
-  state : state;
+  selected : selected;
   mode : mode;
   is_metameta_mode : bool;
   mousedrag_startpos : position option;
@@ -45,7 +45,7 @@ type uiaction =
   | HighlightAll of id list
   | HighlightQuad of position * position
   | AddPoint of id * position
-  | MovePoint of id * position
+  | MovePoint of id * position * position
   (* | AddLine of id * id *)
   (* | AddMetaPoint of id * position *)
   (* | AddMetaLine of id * id *)
@@ -55,13 +55,16 @@ type uiaction =
 let is_shift f = f Key.Left_shift || f Key.Right_shift
 let pos_to_string (x, y) = "(" ^ Int.to_string x ^ ", " ^ Int.to_string y ^ ")"
 
+let point_to_string (id, pos) =
+  "id: " ^ Int.to_string id ^ "pos: " ^ pos_to_string pos
+
 let ui_to_string
-    { state; mode; is_metameta_mode; mouse_pos; mousedrag_startpos } =
+    { selected; mode; is_metameta_mode; mouse_pos; mousedrag_startpos } =
   let state_string =
-    match state with
-    | NoSelection -> "No selection"
-    | Selected ids ->
-        "Selected [" ^ String.concat "," (List.map Int.to_string ids) ^ "]"
+    match selected with
+    | [] -> "No selection"
+    | pts ->
+        "Selected [" ^ String.concat "," (List.map point_to_string pts) ^ "]"
   in
   let mode_string =
     match mode with InkMode -> "ink" | MetaInkMode -> "meta-ink"
