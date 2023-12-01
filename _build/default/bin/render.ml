@@ -15,6 +15,12 @@ let pseudoshift_ui world ({ selected; _ } as ui) =
   in
   { ui with selected = selected' }
 
+let draw_inkline (p1 : position) (p2 : position) =
+  draw_line_ex (vec p1) (vec p2) 4.0 blue
+
+let draw_metainkline (p1 : position) (p2 : position) =
+  draw_line_ex (vec p1) (vec p2) 4.0 blue
+
 let draw_ui ui =
   let draw_mode mode =
     let draw_uibox should_underline color text w x =
@@ -66,6 +72,11 @@ let draw_ui ui =
                   ClickedEmptySpace"))
     | NoSelection -> ()
   in
+  let draw_action : user_action -> unit = function
+    | DraggingFrom (Shift, Point (_, pos)) -> draw_inkline pos ui.mousepos
+    | _ -> ()
+  in
+  draw_action ui.input;
   draw_mode ui.mode;
   draw_selection ui.selected
 
@@ -77,4 +88,12 @@ let draw_world (world : world) : unit =
     | Ink -> draw_inkpoint pos
     | MetaInk -> draw_metainkpoint pos
   in
-  IdMap.iter draw_point world.points
+  let draw_connector id (startpt, endpt) =
+    let startpos = IdMap.find startpt world.points in
+    let endpos = IdMap.find endpt world.points in
+    match IdMap.find id world.colors with
+    | Ink -> draw_inkline startpos endpos
+    | MetaInk -> draw_metainkline startpos endpos
+  in
+  IdMap.iter draw_point world.points;
+  IdMap.iter draw_connector world.lines

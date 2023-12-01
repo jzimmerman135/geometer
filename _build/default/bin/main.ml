@@ -2,7 +2,7 @@ open Base
 
 let setup () =
   Raylib.init_window 900 506 "Geometer";
-  Raylib.set_target_fps 400;
+  Raylib.set_target_fps 120;
   (World.empty, Ui.empty)
 
 let rec loop (world, ui) =

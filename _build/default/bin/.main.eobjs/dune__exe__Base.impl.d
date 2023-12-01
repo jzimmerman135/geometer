@@ -1,1 +1,1 @@
-bin/base.ml: Color Int Key List Map Raylib Set String
+bin/base.ml: Color Float Int Key List Map Raylib Set String Vector2

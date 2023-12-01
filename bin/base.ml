@@ -60,20 +60,25 @@ type ui = {
 }
 
 type uiaction =
-  | AddPoint of point
+  | AddPoint of stuff * point
+  | AddLine of stuff * id * (id * id)
   | MovePoint of id * position
-  | AddLine of id * id
   | DeletePoint of point
-  (* | AddMetaPoint of id * position *)
-  (* | AddMetaLine of id * id *)
   | Seq of uiaction list
   | NoAction
 
 let is_shift f = f Key.Left_shift || f Key.Right_shift
 let pos_to_string (x, y) = "(" ^ Int.to_string x ^ ", " ^ Int.to_string y ^ ")"
 
+let line_to_string id (startid, endid) =
+  let istr = Int.to_string in
+  String.concat " "
+    [ "Line:"; istr id; "Start:"; istr startid; "End:"; istr endid ]
+
+let vec ((x, y) : position) = Vector2.create (Float.of_int x) (Float.of_int y)
+
 let point_to_string (id, pos) =
-  "id: " ^ Int.to_string id ^ "pos: " ^ pos_to_string pos
+  "id: " ^ Int.to_string id ^ " pos: " ^ pos_to_string pos
 
 let ui_to_string { selected; mode; mousepos; input } =
   let open String in

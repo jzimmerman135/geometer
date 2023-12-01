@@ -1,5 +1,6 @@
 open Base
 
+(* global identifier count *)
 let idcount = ref (-1)
 
 let idgen () =
@@ -9,46 +10,51 @@ let idgen () =
 let empty = { points = IdMap.empty; lines = IdMap.empty; colors = IdMap.empty }
 
 let add_point id pos ({ points; colors; _ } as world) =
-  print_endline
-    (String.concat " "
-       [ "adding point with id:"; Int.to_string id; "pos:"; pos_to_string pos ]);
   {
     world with
     points = IdMap.add id pos points;
     colors = IdMap.add id Ink colors;
   }
 
-let remove_point id ({ points; colors; _ } as world) =
+let remove_point id { points; colors; lines } =
   {
-    world with
     points = IdMap.remove id points;
     colors = IdMap.remove id colors;
+    lines =
+      IdMap.filter
+        (fun _ (startid, endid) -> startid <> id && endid <> id)
+        lines;
   }
 
-let add_line id (ends : lineends) ({ points; colors; _ } as world) =
+let add_line id (ends : lineends) ({ lines; colors; _ } as world) =
   {
     world with
-    lines = IdMap.add id ends points;
+    lines = IdMap.add id ends lines;
     colors = IdMap.add id Ink colors;
   }
 
-let add_metaline id (ends : lineends) ({ points; colors; _ } as world) =
+let remove_line id ({ lines; colors; _ } as world) =
+  { world with lines = IdMap.remove id lines; colors = IdMap.remove id colors }
+
+let add_metaline id (ends : lineends) ({ lines; colors; _ } as world) =
   {
     world with
-    lines = IdMap.add id ends points;
+    lines = IdMap.add id ends lines;
     colors = IdMap.add id MetaInk colors;
   }
 
 let points_in_rect world (x1, y1) (x2, y2) : point list =
-  let minx, miny = (min x1 x2, min y1 y2) in
-  let maxx, maxy = (max x1 x2, max y1 y2) in
+  let ptsize = Int.of_float point_size in
+  let minx, miny = (min x1 x2 - ptsize, min y1 y2 - ptsize) in
+  let maxx, maxy = (max x1 x2 + ptsize, max y1 y2 + ptsize) in
   let inbounds _ (x, y) = minx < x && x < maxx && miny < y && y < maxy in
   IdMap.filter inbounds world.points |> IdMap.to_seq |> List.of_seq
 
 let rec update world (action : uiaction) : world =
   match action with
   | Seq actions -> List.fold_left update world actions
-  | AddPoint (id, pos) -> add_point id pos world
+  | AddPoint (Ink, (id, pos)) -> add_point id pos world
+  | AddLine (Ink, id, ends) -> add_line id ends world
   | MovePoint (id, newpos) when IdMap.mem id world.points ->
       add_point id newpos world
   | DeletePoint (id, _) -> remove_point id world

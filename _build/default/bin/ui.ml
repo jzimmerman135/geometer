@@ -10,6 +10,16 @@ let empty =
     input = Nothing;
   }
 
+let contacts_point pred points pos =
+  let contact_radius = Int.of_float point_highlight_size in
+  let makes_contact (x1, y1) (x2, y2) =
+    abs (x1 - x2) < contact_radius && abs (y1 - y2) < contact_radius
+  in
+  let at (_, pos') = makes_contact pos pos' in
+  IdMap.to_seq points |> Seq.find (fun pt -> pred pt && at pt)
+
+let contacts_any_point_in = contacts_point (fun _ -> true)
+
 let poll ui world =
   let mousepos = (get_mouse_x (), get_mouse_y ()) in
   let mode =
@@ -28,15 +38,7 @@ let poll ui world =
     | MetaMetaMode (MetaMetaMode _) -> raise (Failure "meta-meta (meta-meta)")
   in
   let input =
-    let contacts_point pred pos =
-      let contact_radius = Int.of_float point_highlight_size in
-      let makes_contact (x1, y1) (x2, y2) =
-        abs (x1 - x2) < contact_radius && abs (y1 - y2) < contact_radius
-      in
-      let at (_, pos') = makes_contact pos pos' in
-      IdMap.to_seq world.points |> Seq.find (fun pt -> pred pt && at pt)
-    in
-    let contacts_any_point = contacts_point (fun _ -> true) in
+    let contacts_any_point = contacts_any_point_in world.points in
     let mousedown = is_mouse_button_down MouseButton.Left in
     let mousereleased = is_mouse_button_released MouseButton.Left in
     let shiftdown = is_key_down Key.Left_shift || is_key_down Key.Right_shift in
@@ -95,25 +97,33 @@ let action world ui : ui * uiaction =
     | DragReleasedFrom _, ActivelySelecting (_ :: _ as xs) ->
         (Selected xs, NoAction)
     | DragReleasedFrom _, ActivelySelecting [] -> (NoSelection, NoAction)
-    (* released while selection *)
+    (* released while moving selection *)
     | DragReleasedFrom ((Plain, Point (_, startpos)), endpos), Selected pts ->
         ( Selected (List.map (shiftpt startpos endpos) pts),
           Seq (genmoves pts startpos endpos) )
+    (* released while drawing a line *)
+    | DragReleasedFrom ((Shift, Point (startid, _)), endpos), _ -> (
+        match contacts_any_point_in world.points endpos with
+        | Some ((endid, _) as endpt) when startid <> endid ->
+            let id = World.idgen () in
+            (Selected [ endpt ], AddLine (Ink, id, (startid, endid)))
+        | _ -> (NoSelection, NoAction))
     (* selecting a point *)
     | Clicked (Plain, Point pt), NoSelection -> (Selected [ pt ], NoAction)
     | Clicked (Plain, Point pt), Selected pts when not (List.mem pt pts) ->
         (Selected [ pt ], NoAction)
     (* adding a point *)
-    | Clicked (Shift, EmptySpace pos), NoSelection ->
+    | Clicked (Shift, EmptySpace pos), (NoSelection as sel)
+    | Clicked (Shift, EmptySpace pos), (Selected _ as sel) -> (
+        let pts = match sel with Selected pts -> pts | _ -> [] in
         let id = World.idgen () in
-        (Selected [ (id, pos) ], AddPoint (id, pos))
-    | Clicked (Shift, EmptySpace pos), Selected pts ->
-        let id = World.idgen () in
-        (Selected ((id, pos) :: pts), AddPoint (id, pos))
+        match ui.mode with
+        | MetaMetaMode InkMode | InkMode ->
+            (Selected ((id, pos) :: pts), AddPoint (Ink, (id, pos)))
+        | _ -> (NoSelection, NoAction))
     (* moving a point *)
     | DraggingFrom (Plain, Point (id, startpos)), Selected pts
       when List.mem_assoc id pts ->
-        print_endline "here";
         (Selected pts, Seq (genmoves pts startpos ui.mousepos))
     (* start drawing a line *)
     | Clicked (Shift, Point pt), Selected _ -> (Selected [ pt ], NoAction)
