@@ -20,6 +20,16 @@ let contacts_point pred points pos =
 
 let contacts_any_point_in = contacts_point (fun _ -> true)
 
+let mk_combinator_menu (combs : (string * int) list) :
+    (position * position) list =
+  (* let gap = 36 in *)
+  (* let off = 48 in *)
+  (* let n_items = List.length combs in *)
+  (* let n_items' = Float.of_int n_items in *)
+  let xoff = 0 in
+  let yoff = 0 in
+  List.map (fun (_name, _nports) -> ((xoff, yoff), (xoff, yoff))) combs
+
 let poll ui world =
   let mousepos = (get_mouse_x (), get_mouse_y ()) in
   let mode =
@@ -93,6 +103,9 @@ let action world ui : ui * uiaction =
     | DraggingFrom (Plain, EmptySpace pos), ActivelySelecting _ ->
         ( ActivelySelecting (World.points_in_rect world pos ui.mousepos),
           NoAction )
+    (* combinator menu drag *)
+    | DraggingFrom (Shift, EmptySpace _), CombinatorMenuSelection m ->
+        (CombinatorMenuSelection m, NoAction)
     (* release from active selection drag *)
     | DragReleasedFrom _, ActivelySelecting (_ :: _ as xs) ->
         (Selected xs, NoAction)
@@ -102,12 +115,38 @@ let action world ui : ui * uiaction =
         ( Selected (List.map (shiftpt startpos endpos) pts),
           Seq (genmoves pts startpos endpos) )
     (* released while drawing a line *)
-    | DragReleasedFrom ((Shift, Point (startid, _)), endpos), _ -> (
-        match contacts_any_point_in world.points endpos with
-        | Some ((endid, _) as endpt) when startid <> endid ->
-            let id = World.idgen () in
-            (Selected [ endpt ], AddLine (Ink, id, (startid, endid)))
-        | _ -> (NoSelection, NoAction))
+    | DragReleasedFrom ((Shift, Point ((startid, _) as pt)), endpos), sel ->
+        let selpts = get_selected sel in
+        let findstuff id = IdMap.find id world.colors in
+        let rec mkline point_at_mouse mode =
+          match (mode, point_at_mouse) with
+          | MetaMetaMode mode', _ -> mkline point_at_mouse mode'
+          (* ensure line end was released on top of another point *)
+          | MetaInkMode, None ->
+              let ptid, lineid = (World.idgen (), World.idgen ()) in
+              let newpt = (ptid, ui.mousepos) in
+              ( Selected [ newpt ],
+                Seq
+                  [
+                    AddPoint (MetaInk, newpt);
+                    AddLine (MetaInk, lineid, (startid, ptid));
+                  ] )
+          | InkMode, Some (endid, pos) when startid <> endid -> (
+              let id = World.idgen () in
+              match (findstuff startid, findstuff endid) with
+              | Ink, Ink ->
+                  ( Selected ((endid, pos) :: selpts),
+                    AddLine (Ink, id, (startid, endid)) )
+              | _ -> (NoSelection, NoAction))
+          (* shift is multiselect *)
+          | _, _ when selpts <> [] ->
+              let selpts' =
+                if List.mem_assoc startid selpts then selpts else pt :: selpts
+              in
+              (Selected selpts', NoAction)
+          | _, _ -> (NoSelection, NoAction)
+        in
+        mkline (contacts_any_point_in world.points endpos) ui.mode
     (* selecting a point *)
     | Clicked (Plain, Point pt), NoSelection -> (Selected [ pt ], NoAction)
     | Clicked (Plain, Point pt), Selected pts when not (List.mem pt pts) ->
@@ -118,15 +157,21 @@ let action world ui : ui * uiaction =
         let pts = match sel with Selected pts -> pts | _ -> [] in
         let id = World.idgen () in
         match ui.mode with
+        (* ink mode *)
         | MetaMetaMode InkMode | InkMode ->
             (Selected ((id, pos) :: pts), AddPoint (Ink, (id, pos)))
+        (* meta-ink mode *)
+        | MetaMetaMode MetaInkMode | MetaInkMode ->
+            (CombinatorMenuSelection 2, NoAction)
         | _ -> (NoSelection, NoAction))
     (* moving a point *)
     | DraggingFrom (Plain, Point (id, startpos)), Selected pts
       when List.mem_assoc id pts ->
         (Selected pts, Seq (genmoves pts startpos ui.mousepos))
-    (* start drawing a line *)
-    | Clicked (Shift, Point pt), Selected _ -> (Selected [ pt ], NoAction)
+    (* shift click a point to add to selection, also starts drawing a line *)
+    | Clicked (Shift, Point (id, pos)), Selected pts
+      when not (List.mem_assoc id pts) ->
+        (Selected ((id, pos) :: pts), NoAction)
     | Clicked (Shift, Point pt), NoSelection -> (Selected [ pt ], NoAction)
     (* no interaction *)
     | _, Selected pts -> (Selected pts, NoAction)

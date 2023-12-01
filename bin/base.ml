@@ -5,27 +5,47 @@ module IdSet = Set.Make (Int)
 type color = Raylib.Color.t
 
 let background : Color.t = Color.create 0xfe 0xf9 0xef 0xff
-let blue : Color.t = Color.create 0x35 0x5C 0x7D 0xff
-let red : Color.t = Color.create 0xf6 0x72 0x80 0xff
-let green : Color.t = Color.create 0x6A 0x9C 0x89 0xff
+let text_color_base : int -> Color.t = Color.create 0x35 0x5C 0x6D
+let blue_base : int -> Color.t = Color.create 0x35 0x5C 0x7D
+let red_base : int -> Color.t = Color.create 0xf6 0x72 0x80
+let blue = blue_base 0xdd
+let red = red_base 0xaa
+let text_color = text_color_base 0xaa
+let green : Color.t = Color.create 0x6A 0x9C 0x89 0xdd
 let highlight = Color.create 20 208 222
 let highlight_em = Color.create 20 130 140 0xff
 let point_size = 6.0
-let point_highlight_size = 14.0
+let point_highlight_size = 12.0
+let line_width = 3.0
+let line_highlight_width = 5.0
 
 (* WORLD *)
 
 type stuff = Ink | MetaInk
+type position = int * int
 type id = int
+type point = id * position
+type lineends = id * id
 
-type linemap = lineends IdMap.t
-and lineends = id * id
+type combinator = int * rect list
+and rect = int * int * int * int
 
-type pointmap = position IdMap.t
-and position = int * int
+type world = {
+  points : position IdMap.t;
+  lines : (id * id) IdMap.t;
+  colors : stuff IdMap.t;
+  combinators : (string * int) list;
+}
 
-type stuffmap = stuff IdMap.t
-type world = { points : pointmap; lines : linemap; colors : stuffmap }
+type relationship = Port of string * id
+
+type uiaction =
+  | AddPoint of stuff * point
+  | AddLine of stuff * id * (id * id)
+  | MovePoint of id * position
+  | DeletePoint of point
+  | Seq of uiaction list
+  | NoAction
 
 (* UI *)
 
@@ -35,8 +55,7 @@ and selection =
   | NoSelection
   | Selected of point list
   | ActivelySelecting of point list
-
-and point = id * position
+  | CombinatorMenuSelection of int
 
 type user_action =
   | Clicked of clickorigin
@@ -59,23 +78,37 @@ type ui = {
   input : user_action;
 }
 
-type uiaction =
-  | AddPoint of stuff * point
-  | AddLine of stuff * id * (id * id)
-  | MovePoint of id * position
-  | DeletePoint of point
-  | Seq of uiaction list
-  | NoAction
+(* UTILS *)
 
+let vec ((x, y) : position) = Vector2.create (Float.of_int x) (Float.of_int y)
 let is_shift f = f Key.Left_shift || f Key.Right_shift
+let is_mode_ink = function InkMode | MetaMetaMode InkMode -> true | _ -> false
+
+let is_mode_metaink = function
+  | MetaInkMode | MetaMetaMode MetaInkMode -> true
+  | _ -> false
+
+let get_selected = function
+  | ActivelySelecting pts | Selected pts -> pts
+  | CombinatorMenuSelection _ | NoSelection -> []
+
+(* let iter_enumerated : ('a -> int -> unit) -> 'a list -> unit = *)
+(*   let rec enumerate i f = function *)
+(*     | x :: xs -> *)
+(*         f x i; *)
+(*         enumerate (i + 1) f xs *)
+(*     | [] -> () *)
+(*   in *)
+(*   enumerate 0 *)
+
+(* STRINGIFIERS *)
+
 let pos_to_string (x, y) = "(" ^ Int.to_string x ^ ", " ^ Int.to_string y ^ ")"
 
 let line_to_string id (startid, endid) =
   let istr = Int.to_string in
   String.concat " "
     [ "Line:"; istr id; "Start:"; istr startid; "End:"; istr endid ]
-
-let vec ((x, y) : position) = Vector2.create (Float.of_int x) (Float.of_int y)
 
 let point_to_string (id, pos) =
   "id: " ^ Int.to_string id ^ " pos: " ^ pos_to_string pos
@@ -126,6 +159,7 @@ let ui_to_string { selected; mode; mousepos; input } =
         "actively selecting: ["
         ^ concat ", " (List.map point_to_string pts)
         ^ "]"
+    | CombinatorMenuSelection _ -> "combinator menu"
   in
   concat "\n"
     [

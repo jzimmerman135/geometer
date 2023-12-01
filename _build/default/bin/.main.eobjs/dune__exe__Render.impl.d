@@ -1,1 +1,1 @@
-bin/render.ml: Base IdMap List Raylib
+bin/render.ml: Base Float IdMap Int List Raylib String
