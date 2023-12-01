@@ -35,29 +35,16 @@ let combinator_dims (x, y) text outports =
   let w' = w + ((outports + 1) * 24) - 12 in
   (x, y - 12, w', h)
 
-let draw_combinator color (x, y, w, h) text outports =
-  draw_rectangle_lines x y w h green;
-  let rec draw_outports x' y' outports' =
-    let offset = 12 + (outports' * 24) in
-    if outports' < outports then (
-      draw_outports x' y' (outports' + 1);
-      draw_circle (x' + offset) (y' + 12) 12. color;
-      draw_circle (x' + offset) (y' + 12) 8. background)
-  in
-  draw_rectangle (x + 12) y (w - 24) h color;
-  draw_outports x y 0;
-  draw_text text (x + (outports * 24) + 3) y 24 text_color;
-  draw_circle (x + w - 12) (y + 12) 12. color;
-  draw_circle (x + w - 12) (y + 12) 8. background;
-  (x, y, w, h)
-
-let combinator_menu_dims (x, y) (combs : (string * int) list) :
+let combinator_menu_dims (combs : (string * int) list) :
     (int * int * int * int) list =
-  let gap = 36 in
-  let off = 48 in
+  (* builds menu around 0, 0 *)
+  let x, y = (0, 0) in
+  let gap = 30 in
+  let off = -10 in
   let n_items = List.length combs in
   let n_items' = Float.of_int n_items in
-  let radius = 48. in
+  let y' = y - (gap * n_items / 2) + 24 in
+  let radius = 24. in
   let pi = 3.14 in
   let combinator_menuitem_dims index name outports =
     let rad = (Float.of_int index *. (pi /. (n_items' -. 1.))) -. (pi /. 2.) in
@@ -65,39 +52,34 @@ let combinator_menu_dims (x, y) (combs : (string * int) list) :
       (Int.of_float (radius *. cos rad), Int.of_float (radius *. 2. *. sin rad))
     in
     let ydiff = gap * index in
-    combinator_dims (x + xdiff + off, y + ydiff) name outports
+    combinator_dims (x + xdiff + off, y' + ydiff) name outports
   in
   List.mapi
     (fun index (name, ps) -> combinator_menuitem_dims index name ps)
     combs
 
-let draw_combinator_menu (x, y) emphasis_idx : (int * int * int * int) list =
-  let gap = 36 in
-  let off = 48 in
-  let combs =
-    [ ("sin", 1); ("hello", 3); ("tan", 2); ("add", 3); ("mul", 2); ("cos", 1) ]
+let draw_combinator color (x, y, w, h) text outports =
+  let r = h / 2 in
+  let r' = Float.of_int (h / 2) in
+  let draw_half_circle x y =
+    draw_circle_sector (vec (x, y)) 12. 180. 360. 10 color
   in
-  let n_items = List.length combs in
-  let n_items' = Float.of_int n_items in
-  let y = y - (gap * n_items / 2) + 24 in
-  let draw_combinator_menuitem color index name outports =
-    let radius = 48. in
-    let pi = 3.14 in
-    let rad = (Float.of_int index *. (pi /. (n_items' -. 1.))) -. (pi /. 2.) in
-    let xdiff, _ydiff =
-      (Int.of_float (radius *. cos rad), Int.of_float (radius *. 2. *. sin rad))
-    in
-    let ydiff = gap * index in
-    let dims = combinator_dims (x + xdiff + off, y + ydiff) name outports in
-    draw_combinator color dims name outports
+  let rec draw_outports x' y' outports' =
+    let offset = 12 + (outports' * 24) in
+    if outports' < outports then (
+      draw_outports x' y' (outports' + 1);
+      draw_circle (x' + offset) (y' + r) r' color;
+      draw_circle (x' + offset) (y' + r) (point_size +. 2.) background)
   in
-  List.fold_left
-    (fun (index, res) (name, ports) ->
-      let color = if index == emphasis_idx then red else highlight 0x44 in
-      let res' = draw_combinator_menuitem color index name ports :: res in
-      (index + 1, res'))
-    (0, []) combs
-  |> snd
+  let text_offset = if outports > 0 then outports * 24 else r in
+  draw_rectangle (x + r) y (w - 24) h background;
+  draw_circle (x + w - r) (y + r) r' background;
+  draw_circle (x + r) (y + r) r' background;
+  draw_rectangle (x + r) y (w - 24) h color;
+  if outports = 0 then draw_half_circle (x + r) (y + r) else draw_outports x y 0;
+  draw_text text (x + text_offset + 3) y 24 text_color;
+  draw_circle (x + w - r) (y + r) r' color;
+  draw_circle (x + w - r) (y + r) 8. background
 
 let draw_ui ui =
   let draw_mode mode =
@@ -117,6 +99,14 @@ let draw_ui ui =
           green "meta-meta" 180
           (get_screen_width () - 190)
     | _ -> ()
+  in
+  let draw_combinator_menu combs (x, y) _emphasis_idx =
+    List.iteri
+      (fun index ((name, ports), dims) ->
+        let col = if index = _emphasis_idx then red else highlight 0x44 in
+        let x', y', w, h = dims in
+        draw_combinator col (x + x', y + y', w, h) name ports)
+      combs
   in
   let rec draw_selection : selection -> unit =
     let draw_point_highlight ((x, y) : position) =
@@ -143,12 +133,7 @@ let draw_ui ui =
     | CombinatorMenuSelection i -> (
         match ui.input with
         | DraggingFrom (_, EmptySpace pos) ->
-            let a, b, c, d = combinator_dims ui.mousepos "hey" 3 in
-            draw_rectangle_lines a b c d blue;
-
-            List.iter ignore
-              (* (fun (x, y, z, w) -> draw_rectangle_lines x y (z - x) (w - y) red) *)
-              (draw_combinator_menu pos i)
+            draw_combinator_menu ui.combinators pos i
         | _ -> ())
     | NoSelection -> ()
   in

@@ -1,6 +1,8 @@
-open Raylib
 module IdMap = Map.Make (Int)
 module IdSet = Set.Make (Int)
+module Color = Raylib.Color
+module Vector2 = Raylib.Vector2
+module Key = Raylib.Key
 
 type color = Raylib.Color.t
 
@@ -27,14 +29,11 @@ type id = int
 type point = id * position
 type lineends = id * id
 
-type combinator = int * rect list
-and rect = int * int * int * int
-
 type world = {
   points : position IdMap.t;
   lines : (id * id) IdMap.t;
   colors : stuff IdMap.t;
-  combinators : (string * int) list;
+  combinators : (string * position) IdMap.t;
 }
 
 type relationship = Port of string * id
@@ -71,10 +70,15 @@ and clickorigin = whichclick * place
 and whichclick = Plain | Shift
 and place = EmptySpace of position | Point of point
 
+type combinator = (string * int) * rect
+and rect = int * int * int * int
+
 type ui = {
+  combinators : combinator list;
   mousepos : int * int;
   selected : selection;
   mode : mode;
+  animation : float;
   input : user_action;
 }
 
@@ -92,16 +96,16 @@ let get_selected = function
   | ActivelySelecting pts | Selected pts -> pts
   | CombinatorMenuSelection _ | NoSelection -> []
 
-(* let iter_enumerated : ('a -> int -> unit) -> 'a list -> unit = *)
-(*   let rec enumerate i f = function *)
-(*     | x :: xs -> *)
-(*         f x i; *)
-(*         enumerate (i + 1) f xs *)
-(*     | [] -> () *)
-(*   in *)
-(*   enumerate 0 *)
-
 (* STRINGIFIERS *)
+
+let rect_to_string (x, y, w, h) =
+  String.concat " "
+    [
+      "x: " ^ Int.to_string x;
+      "y: " ^ Int.to_string y;
+      "w: " ^ Int.to_string w;
+      "h: " ^ Int.to_string h;
+    ]
 
 let pos_to_string (x, y) = "(" ^ Int.to_string x ^ ", " ^ Int.to_string y ^ ")"
 
@@ -113,7 +117,7 @@ let line_to_string id (startid, endid) =
 let point_to_string (id, pos) =
   "id: " ^ Int.to_string id ^ " pos: " ^ pos_to_string pos
 
-let ui_to_string { selected; mode; mousepos; input } =
+let ui_to_string { selected; mode; mousepos; input; animation; _ } =
   let open String in
   let clkstr = function Plain -> "" | Shift -> "shift " in
   let plcstr = function
@@ -165,6 +169,7 @@ let ui_to_string { selected; mode; mousepos; input } =
     [
       "input: " ^ input_str;
       "mode: " ^ mode_str;
+      "animation: " ^ Float.to_string animation;
       "mousepos: " ^ mousepos_str;
       "selected: " ^ selected_str;
     ]

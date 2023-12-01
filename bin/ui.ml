@@ -1,13 +1,19 @@
 open Base
-open Raylib
 module Vec2 = Raylib.Vector2
+open Raylib
 
 let empty =
   {
     mousepos = (get_mouse_x (), get_mouse_y ());
     selected = NoSelection;
     mode = InkMode;
+    animation = 0.0;
     input = Nothing;
+    combinators =
+      (let combs =
+         [ ("add", 2); ("sin", 1); ("time", 0); ("mul", 2); ("gate", 1) ]
+       in
+       List.combine combs (Render.combinator_menu_dims combs));
   }
 
 let contacts_point pred points pos =
@@ -20,15 +26,13 @@ let contacts_point pred points pos =
 
 let contacts_any_point_in = contacts_point (fun _ -> true)
 
-let mk_combinator_menu (combs : (string * int) list) :
-    (position * position) list =
-  (* let gap = 36 in *)
-  (* let off = 48 in *)
-  (* let n_items = List.length combs in *)
-  (* let n_items' = Float.of_int n_items in *)
-  let xoff = 0 in
-  let yoff = 0 in
-  List.map (fun (_name, _nports) -> ((xoff, yoff), (xoff, yoff))) combs
+let contacts_rect_rough leeway (x', y') (x, y, w, h) =
+  x - (leeway * 10) < x'
+  && x' < x + w + (leeway * 10)
+  && y - leeway < y'
+  && y' < y + h + leeway
+
+let contacts_rect = contacts_rect_rough 4
 
 let poll ui world =
   let mousepos = (get_mouse_x (), get_mouse_y ()) in
@@ -46,6 +50,12 @@ let poll ui world =
     | MetaMetaMode InkMode -> MetaMetaMode MetaInkMode
     | MetaMetaMode MetaInkMode -> MetaMetaMode InkMode
     | MetaMetaMode (MetaMetaMode _) -> raise (Failure "meta-meta (meta-meta)")
+  in
+  let animation =
+    match ui.animation with
+    | 0. when ui.mode = mode -> 0.
+    | n when n > 1. -> 0.
+    | n -> n +. 0.01
   in
   let input =
     let contacts_any_point = contacts_any_point_in world.points in
@@ -77,12 +87,15 @@ let poll ui world =
     | DragReleasedFrom (_, _), _ ->
         Nothing
   in
-  { ui with mousepos; mode; input }
+  { ui with mousepos; mode; input; animation }
 
 let action world ui : ui * uiaction =
+  let addsel (id, pos) selected =
+    if List.mem_assoc id selected then selected else (id, pos) :: selected
+  in
   let movept (diffx, diffy) (id, (px, py)) = (id, (px + diffx, py + diffy)) in
-  let diffpt (fromx, fromy) (tox, toy) = (tox - fromx, toy - fromy) in
-  let shiftpt start stop : point -> point = diffpt start stop |> movept in
+  let diffpos (fromx, fromy) (tox, toy) = (tox - fromx, toy - fromy) in
+  let shiftpt start stop : point -> point = diffpos start stop |> movept in
   let genmoves (pts : point list) (start : position) (stop : position) =
     let genmove ((id, _) as pt) =
       MovePoint (id, shiftpt start stop pt |> snd)
@@ -95,17 +108,19 @@ let action world ui : ui * uiaction =
     | Delete, Selected pts ->
         let deletept pt = DeletePoint pt in
         (NoSelection, Seq (List.map deletept pts))
-    (* start active selection drag *)
-    | Clicked (Plain, EmptySpace _), NoSelection
-    | Clicked (Plain, EmptySpace _), Selected _ ->
-        (ActivelySelecting [], NoAction)
     (* maintiain active selection drag *)
     | DraggingFrom (Plain, EmptySpace pos), ActivelySelecting _ ->
         ( ActivelySelecting (World.points_in_rect world pos ui.mousepos),
           NoAction )
-    (* combinator menu drag *)
-    | DraggingFrom (Shift, EmptySpace _), CombinatorMenuSelection m ->
-        (CombinatorMenuSelection m, NoAction)
+    (* maintain combinator menu drag *)
+    | DraggingFrom (Shift, EmptySpace pos), CombinatorMenuSelection _ ->
+        let dragoff = diffpos pos ui.mousepos in
+        let rec findi i = function
+          | (_, rect) :: _ when contacts_rect dragoff rect -> i
+          | _ :: rs -> findi (i + 1) rs
+          | [] -> -1
+        in
+        (CombinatorMenuSelection (findi 0 ui.combinators), NoAction)
     (* release from active selection drag *)
     | DragReleasedFrom _, ActivelySelecting (_ :: _ as xs) ->
         (Selected xs, NoAction)
@@ -114,6 +129,14 @@ let action world ui : ui * uiaction =
     | DragReleasedFrom ((Plain, Point (_, startpos)), endpos), Selected pts ->
         ( Selected (List.map (shiftpt startpos endpos) pts),
           Seq (genmoves pts startpos endpos) )
+    (* released while picking a combinator from menu, but no menu item picked *)
+    | DragReleasedFrom ((Shift, EmptySpace _), _), CombinatorMenuSelection -1 ->
+        (NoSelection, NoAction)
+    (* released while picking a combinator from menu *)
+    | DragReleasedFrom ((Shift, EmptySpace pos), _), CombinatorMenuSelection _
+      ->
+        let newid = World.idgen () in
+        (NoSelection, AddPoint (MetaInk, (newid, pos)))
     (* released while drawing a line *)
     | DragReleasedFrom ((Shift, Point ((startid, _) as pt)), endpos), sel ->
         let selpts = get_selected sel in
@@ -135,18 +158,18 @@ let action world ui : ui * uiaction =
               let id = World.idgen () in
               match (findstuff startid, findstuff endid) with
               | Ink, Ink ->
-                  ( Selected ((endid, pos) :: selpts),
+                  ( Selected (addsel (endid, pos) selpts),
                     AddLine (Ink, id, (startid, endid)) )
               | _ -> (NoSelection, NoAction))
           (* shift is multiselect *)
-          | _, _ when selpts <> [] ->
-              let selpts' =
-                if List.mem_assoc startid selpts then selpts else pt :: selpts
-              in
-              (Selected selpts', NoAction)
+          | _, _ when selpts <> [] -> (Selected (addsel pt selpts), NoAction)
           | _, _ -> (NoSelection, NoAction)
         in
         mkline (contacts_any_point_in world.points endpos) ui.mode
+    (* start active selection drag *)
+    | Clicked (Plain, EmptySpace _), NoSelection
+    | Clicked (Plain, EmptySpace _), Selected _ ->
+        (ActivelySelecting [], NoAction)
     (* selecting a point *)
     | Clicked (Plain, Point pt), NoSelection -> (Selected [ pt ], NoAction)
     | Clicked (Plain, Point pt), Selected pts when not (List.mem pt pts) ->
@@ -162,7 +185,7 @@ let action world ui : ui * uiaction =
             (Selected ((id, pos) :: pts), AddPoint (Ink, (id, pos)))
         (* meta-ink mode *)
         | MetaMetaMode MetaInkMode | MetaInkMode ->
-            (CombinatorMenuSelection 2, NoAction)
+            (CombinatorMenuSelection (-1), NoAction)
         | _ -> (NoSelection, NoAction))
     (* moving a point *)
     | DraggingFrom (Plain, Point (id, startpos)), Selected pts

@@ -12,7 +12,7 @@ let empty =
     points = IdMap.empty;
     lines = IdMap.empty;
     colors = IdMap.empty;
-    combinators = [ ("add", 2); ("sin", 2); ("time", 0); ("mul", 2) ];
+    combinators = IdMap.empty;
   }
 
 let add_point id pos ({ points; colors; _ } as world) =
@@ -40,22 +40,24 @@ let remove_point id ({ points; colors; lines; _ } as world) =
         lines;
   }
 
-let add_line id (ends : lineends) ({ lines; colors; _ } as world) =
-  {
-    world with
-    lines = IdMap.add id ends lines;
-    colors = IdMap.add id Ink colors;
-  }
+let add_line_internal stuff id (ends : lineends) ({ lines; colors; _ } as world)
+    =
+  let swap (e1, e2) = (e2, e1) in
+  if IdMap.exists (fun _ ends' -> ends = ends' || swap ends = ends') lines then
+    world
+  else
+    {
+      world with
+      lines = IdMap.add id ends lines;
+      colors = IdMap.add id stuff colors;
+    }
+
+let add_line = add_line_internal Ink
 
 let remove_line id ({ lines; colors; _ } as world) =
   { world with lines = IdMap.remove id lines; colors = IdMap.remove id colors }
 
-let add_metaline id (ends : lineends) ({ lines; colors; _ } as world) =
-  {
-    world with
-    lines = IdMap.add id ends lines;
-    colors = IdMap.add id MetaInk colors;
-  }
+let add_metaline = add_line_internal MetaInk
 
 let points_in_rect world (x1, y1) (x2, y2) : point list =
   let ptsize = Int.of_float point_size in
