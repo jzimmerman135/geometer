@@ -1,1 +1,1 @@
-bin/render.ml: Base Float IdMap Int List Raylib String
+bin/render.ml: Base Color Float IdMap Int Key List Raylib Rectangle String

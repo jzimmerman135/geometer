@@ -59,6 +59,9 @@ let remove_line id ({ lines; colors; _ } as world) =
 
 let add_metaline = add_line_internal MetaInk
 
+let add_combinator id c ({ combinators; _ } as world : world) =
+  { world with combinators = IdMap.add id c combinators }
+
 let points_in_rect world (x1, y1) (x2, y2) : point list =
   let ptsize = Int.of_float point_size in
   let minx, miny = (min x1 x2 - ptsize, min y1 y2 - ptsize) in
@@ -76,4 +79,6 @@ let rec update world (action : uiaction) : world =
   | MovePoint (id, newpos) when IdMap.mem id world.points ->
       { world with points = IdMap.add id newpos world.points }
   | DeletePoint (id, _) -> remove_point id world
+  | AddCombinator (id, (name, pos, inports)) ->
+      add_combinator id (name, pos, inports, idgen ()) world
   | _ -> world

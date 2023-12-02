@@ -24,13 +24,13 @@ let draw_inkline (p1 : position) (p2 : position) =
   draw_line_ex (vec p1) (vec p2) 3.0 blue
 
 let draw_metainkline (p1 : position) (p2 : position) =
-  draw_line_ex (vec p1) (vec p2) 3.0 red
+  draw_line_ex (vec p1) (vec p2) 2.0 red
 
 let draw_inkpoint (x, y) = draw_circle x y point_size blue
-let draw_metainkpoint (x, y) = draw_circle x y point_size red
+let draw_metainkpoint (x, y) = draw_circle x y (point_size -. 2.0) red
 
 let combinator_dims (x, y) text outports =
-  let w = max 36 (12 * (String.length text + 2)) in
+  let w = max 48 (12 * (String.length text + 2)) in
   let h = 24 in
   let w' = w + ((outports + 1) * 24) - 12 in
   (x, y - 12, w', h)
@@ -40,7 +40,7 @@ let combinator_menu_dims (combs : (string * int) list) :
   (* builds menu around 0, 0 *)
   let x, y = (0, 0) in
   let gap = 30 in
-  let off = -10 in
+  let off = -12 in
   let n_items = List.length combs in
   let n_items' = Float.of_int n_items in
   let y' = y - (gap * n_items / 2) + 24 in
@@ -58,12 +58,13 @@ let combinator_menu_dims (combs : (string * int) list) :
     (fun index (name, ps) -> combinator_menuitem_dims index name ps)
     combs
 
+let draw_half_circle color x y =
+  draw_circle_sector (vec (x, y)) 12. 180. 360. 10 color
+
 let draw_combinator color (x, y, w, h) text outports =
+  let draw_half_circle = draw_half_circle color in
   let r = h / 2 in
   let r' = Float.of_int (h / 2) in
-  let draw_half_circle x y =
-    draw_circle_sector (vec (x, y)) 12. 180. 360. 10 color
-  in
   let rec draw_outports x' y' outports' =
     let offset = 12 + (outports' * 24) in
     if outports' < outports then (
@@ -81,6 +82,19 @@ let draw_combinator color (x, y, w, h) text outports =
   draw_circle (x + w - r) (y + r) r' color;
   draw_circle (x + w - r) (y + r) 8. background
 
+let draw_combinator_highlight (x, y, w, h) =
+  let f = Float.of_int in
+  let rect = Rectangle.create (f x -. 3.) (f y -. 3.) (f w +. 6.) (f h +. 6.) in
+  draw_rectangle_rounded_lines rect 2.0 10 1. highlight_em;
+  draw_rectangle_rounded rect 2.0 10 (highlight 0x22)
+
+let ilerp a b = function
+  | true, Some t ->
+      let f = Int.to_float in
+      let a' = f a in
+      Int.of_float (a' +. ((f b -. a') *. t))
+  | _ -> b
+
 let draw_ui ui =
   let draw_mode mode =
     let draw_uibox should_underline color text w x =
@@ -90,8 +104,10 @@ let draw_ui ui =
       if should_underline mode then
         draw_rectangle (x + offset) 42 (w - (offset * 2)) 3 color
     in
-    draw_uibox is_mode_ink blue "ink" 80 10;
-    draw_uibox is_mode_metaink red "meta-ink" 150 90;
+    let inkw = 80 in
+    let metainkw = 150 in
+    draw_uibox is_mode_ink blue "ink" inkw 10;
+    draw_uibox is_mode_metaink red "meta-ink" metainkw (inkw + 10);
     match mode with
     | MetaMetaMode _ ->
         draw_uibox
@@ -108,6 +124,9 @@ let draw_ui ui =
         draw_combinator col (x + x', y + y', w, h) name ports)
       combs
   in
+  let draw_port_menu ports =
+    draw_combinator_menu (List.map (fun (x, y) -> ((x, 0), y)) ports)
+  in
   let rec draw_selection : selection -> unit =
     let draw_point_highlight ((x, y) : position) =
       draw_circle_lines x y point_highlight_size highlight_em;
@@ -122,7 +141,7 @@ let draw_ui ui =
             let mousex, mousey = ui.mousepos in
             let diffx, diffy = (abs (mousex - startx), abs (mousey - starty)) in
             let minx, miny = (min mousex startx, min mousey starty) in
-            draw_rectangle minx miny diffx diffy (highlight 0x22);
+            draw_rectangle minx miny diffx diffy (highlight 0x33);
             draw_rectangle_lines minx miny diffx diffy (highlight 0x44);
             draw_selection (Selected pts)
         | _ ->
@@ -130,6 +149,11 @@ let draw_ui ui =
               (Failure
                  "ActivelySelecting but not DraggingFromEmptySpace or \
                   ClickedEmptySpace"))
+    | PortMenu (_, menupos, -1) -> draw_port_menu ui.ports menupos (-1)
+    | PortMenu ((_, frompos), (menuposx, menuposy), i) ->
+        let _, (x, y, _, _) = List.nth ui.ports i in
+        draw_metainkline frompos (menuposx + x, menuposy + y);
+        draw_port_menu ui.ports (menuposx, menuposy) i
     | CombinatorMenuSelection i -> (
         match ui.input with
         | DraggingFrom (_, EmptySpace pos) ->
@@ -161,5 +185,29 @@ let draw_world (world : world) : unit =
     | Ink -> draw_inkline startpos endpos
     | MetaInk -> draw_metainkline startpos endpos
   in
+  let draw_combinator _ (name, pos, ports, _) =
+    let dims = combinator_dims pos name (List.length ports) in
+    draw_combinator (red_base 0x77) dims name (List.length ports)
+  in
+  IdMap.iter draw_combinator world.combinators;
   IdMap.iter draw_connector world.lines;
   IdMap.iter draw_point world.points
+
+let draw_fps () =
+  let helpstr = if is_key_down Key.H then "" else "Press 'H' for help" in
+  draw_text
+    ("FPS: " ^ Int.to_string (Raylib.get_fps ()) ^ "   " ^ helpstr)
+    10
+    (get_screen_height () - 20)
+    20 Color.lightgray
+
+let draw_controls () =
+  let xoff = (get_screen_width () / 2) - 90 in
+  let yoff = get_screen_height () / 2 in
+  let fontsize = 30 in
+  draw_text "Controls: " (xoff - 20) (yoff - 120) fontsize Color.gray;
+  draw_text "Click" xoff (yoff - 80) fontsize Color.lightgray;
+  draw_text "Shift-click" xoff (yoff - 40) fontsize Color.lightgray;
+  draw_text "Right-click" xoff (yoff + 0) fontsize Color.lightgray;
+  draw_text "M key" xoff (yoff + 40) fontsize Color.lightgray;
+  draw_text "Backspace" xoff (yoff + 80) fontsize Color.lightgray

@@ -24,15 +24,7 @@ let rec initloop (world, ui) =
         10
         (get_screen_height () - 20)
         20 Color.lightgray;
-      let xoff = (get_screen_width () / 2) - 120 in
-      let yoff = get_screen_height () / 2 in
-      let fontsize = 30 in
-      draw_text "Controls: " xoff (yoff - 120) fontsize Color.gray;
-      draw_text "Click" xoff (yoff - 80) fontsize Color.lightgray;
-      draw_text "Shift-click" xoff (yoff - 40) fontsize Color.lightgray;
-      draw_text "Right-click" xoff (yoff + 0) fontsize Color.lightgray;
-      draw_text "M key" xoff (yoff + 40) fontsize Color.lightgray;
-      draw_text "Backspace" xoff (yoff + 80) fontsize Color.lightgray;
+      Render.draw_controls ();
       if is_key_down Key.U then print_endline (ui_to_string ui);
       Render.draw_world world;
       Render.pseudoshift_ui world ui |> Render.draw_ui;
@@ -45,12 +37,9 @@ let rec loop (world, ui) =
     let open Raylib in
     begin_drawing ();
     clear_background background;
-    draw_text
-      ("FPS: " ^ Int.to_string (Raylib.get_fps ()))
-      10
-      (get_screen_height () - 20)
-      20 Color.lightgray;
+    Render.draw_fps ();
     if is_key_down Key.U then print_endline (ui_to_string ui);
+    if is_key_down Key.H then Render.draw_controls ();
     let ui', action = Ui.poll ui world |> Ui.action world in
     let world' = World.update world action in
     Render.draw_world world';

@@ -29,11 +29,21 @@ type id = int
 type point = id * position
 type lineends = id * id
 
+type combinator =
+  | Add of id * id
+  | Time
+  | Cos of id
+  | Sin of id
+  | User of id
+  | X of id
+  | Y of id
+  | Color of id
+
 type world = {
   points : position IdMap.t;
   lines : (id * id) IdMap.t;
   colors : stuff IdMap.t;
-  combinators : (string * position) IdMap.t;
+  combinators : (string * position * id list * id) IdMap.t;
 }
 
 type relationship = Port of string * id
@@ -43,6 +53,7 @@ type uiaction =
   | AddLine of stuff * id * (id * id)
   | MovePoint of id * position
   | DeletePoint of point
+  | AddCombinator of id * (string * position * id list)
   | Seq of uiaction list
   | NoAction
 
@@ -55,6 +66,7 @@ and selection =
   | Selected of point list
   | ActivelySelecting of point list
   | CombinatorMenuSelection of int
+  | PortMenu of point * position * int
 
 type user_action =
   | Clicked of clickorigin
@@ -69,16 +81,15 @@ type user_action =
 and clickorigin = whichclick * place
 and whichclick = Plain | Shift
 and place = EmptySpace of position | Point of point
-
-type combinator = (string * int) * rect
 and rect = int * int * int * int
 
 type ui = {
-  combinators : combinator list;
+  combinators : ((string * int) * rect) list;
+  ports : (string * rect) list;
   mousepos : int * int;
   selected : selection;
   mode : mode;
-  animation : float;
+  animation : float option;
   input : user_action;
 }
 
@@ -94,7 +105,7 @@ let is_mode_metaink = function
 
 let get_selected = function
   | ActivelySelecting pts | Selected pts -> pts
-  | CombinatorMenuSelection _ | NoSelection -> []
+  | PortMenu _ | CombinatorMenuSelection _ | NoSelection -> []
 
 (* STRINGIFIERS *)
 
@@ -163,13 +174,25 @@ let ui_to_string { selected; mode; mousepos; input; animation; _ } =
         "actively selecting: ["
         ^ concat ", " (List.map point_to_string pts)
         ^ "]"
-    | CombinatorMenuSelection _ -> "combinator menu"
+    | PortMenu (frompt, menupos, i) ->
+        concat " "
+          [
+            "portmenu:";
+            pos_to_string menupos;
+            (if i >= 0 then Int.to_string i else "none");
+            "frompt " ^ point_to_string frompt;
+          ]
+    | CombinatorMenuSelection i ->
+        "combinator menu: " ^ if i >= 0 then Int.to_string i else "none"
+  in
+  let anim_str =
+    match animation with Some f -> Float.to_string f | None -> "none"
   in
   concat "\n"
     [
       "input: " ^ input_str;
       "mode: " ^ mode_str;
-      "animation: " ^ Float.to_string animation;
+      "animation: " ^ anim_str;
       "mousepos: " ^ mousepos_str;
       "selected: " ^ selected_str;
     ]
