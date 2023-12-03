@@ -23,9 +23,9 @@ let line_highlight_width = 5.0
 
 (* WORLD *)
 
-type stuff = Ink | MetaInk
-type position = int * int
 type id = int
+type stuff = Ink | MetaInk | Combinator of id | Accesor of id
+type position = int * int
 type point = id * position
 type lineends = id * id
 
@@ -42,7 +42,7 @@ type combinator =
 type world = {
   points : position IdMap.t;
   lines : (id * id) IdMap.t;
-  colors : stuff IdMap.t;
+  stuffmap : stuff IdMap.t;
   combinators : (string * position * id list * id) IdMap.t;
 }
 
@@ -54,6 +54,7 @@ type uiaction =
   | MovePoint of id * position
   | DeletePoint of point
   | AddCombinator of id * (string * position * id list)
+  | AddAccessor of (id * position) * id
   | Seq of uiaction list
   | NoAction
 
@@ -80,12 +81,17 @@ type user_action =
 
 and clickorigin = whichclick * place
 and whichclick = Plain | Shift
-and place = EmptySpace of position | Point of point
+
+and place =
+  | EmptySpace of position
+  | Point of point
+  | Combinator of point * int * position
+
 and rect = int * int * int * int
 
 type ui = {
   combinators : ((string * int) * rect) list;
-  ports : (string * rect) list;
+  accessors : (string * rect) list;
   mousepos : int * int;
   selected : selection;
   mode : mode;
@@ -134,6 +140,8 @@ let ui_to_string { selected; mode; mousepos; input; animation; _ } =
   let plcstr = function
     | Point pt -> point_to_string pt
     | EmptySpace pos -> pos_to_string pos
+    | Combinator (pt, i, pos) ->
+        concat " " [ point_to_string pt; Int.to_string i; pos_to_string pos ]
   in
   let input_str =
     match input with

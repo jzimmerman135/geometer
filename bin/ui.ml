@@ -9,13 +9,20 @@ let empty =
     mode = InkMode;
     animation = None;
     input = Nothing;
-    ports =
+    accessors =
       (let ports = [ "size"; "x"; "y"; "r"; "g"; "b" ] in
        List.map (fun x -> (x, 0)) ports
        |> Render.combinator_menu_dims |> List.combine ports);
     combinators =
       (let combs =
-         [ ("add", 2); ("sin", 1); ("time", 0); ("mul", 2); ("gate", 1) ]
+         [
+           ("add", 2);
+           ("sin", 1);
+           ("time", 0);
+           ("mul", 2);
+           ("gate", 1);
+           ("val", 1);
+         ]
        in
        Render.combinator_menu_dims combs |> List.combine combs);
   }
@@ -155,7 +162,7 @@ let action world ui : ui * uiaction =
     (* Released while drawing a line *)
     | DragReleasedFrom ((Shift, Point ((startid, _) as pt)), endpos), sel ->
         let selpts = get_selected sel in
-        let findstuff id = IdMap.find id world.colors in
+        let findstuff id = IdMap.find id world.stuffmap in
         let rec mkline point_at_mouse mode =
           let startptstuff = findstuff startid in
           match (mode, point_at_mouse) with
@@ -239,7 +246,7 @@ let action world ui : ui * uiaction =
           | _ :: rs -> findi (i + 1) rs
           | [] -> -1
         in
-        let i' = findi 0 ui.ports in
+        let i' = findi 0 ui.accessors in
         (PortMenu (frompt_pos, menupos, i'), NoAction)
     (* No interaction *)
     | _, Selected pts -> (Selected pts, NoAction)

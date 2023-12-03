@@ -124,8 +124,9 @@ let draw_ui ui =
         draw_combinator col (x + x', y + y', w, h) name ports)
       combs
   in
-  let draw_port_menu ports =
-    draw_combinator_menu (List.map (fun (x, y) -> ((x, 0), y)) ports)
+  let draw_accessor_menu ports =
+    draw_combinator_menu
+      (List.map (fun (name, dims) -> ((name, 0), dims)) ports)
   in
   let rec draw_selection : selection -> unit =
     let draw_point_highlight ((x, y) : position) =
@@ -149,11 +150,11 @@ let draw_ui ui =
               (Failure
                  "ActivelySelecting but not DraggingFromEmptySpace or \
                   ClickedEmptySpace"))
-    | PortMenu (_, menupos, -1) -> draw_port_menu ui.ports menupos (-1)
+    | PortMenu (_, menupos, -1) -> draw_accessor_menu ui.accessors menupos (-1)
     | PortMenu ((_, frompos), (menuposx, menuposy), i) ->
-        let _, (x, y, _, _) = List.nth ui.ports i in
-        draw_metainkline frompos (menuposx + x, menuposy + y);
-        draw_port_menu ui.ports (menuposx, menuposy) i
+        let _, (x, y, _, _) = List.nth ui.accessors i in
+        draw_metainkline frompos (menuposx + x + 12, menuposy + y + 12);
+        draw_accessor_menu ui.accessors (menuposx, menuposy) i
     | CombinatorMenuSelection i -> (
         match ui.input with
         | DraggingFrom (_, EmptySpace pos) ->
@@ -174,16 +175,18 @@ let draw_ui ui =
 
 let draw_world (world : world) : unit =
   let draw_point id pos =
-    match IdMap.find id world.colors with
+    match IdMap.find id world.stuffmap with
     | Ink -> draw_inkpoint pos
     | MetaInk -> draw_metainkpoint pos
+    | _ -> ()
   in
   let draw_connector id (startpt, endpt) =
     let startpos = IdMap.find startpt world.points in
     let endpos = IdMap.find endpt world.points in
-    match IdMap.find id world.colors with
+    match IdMap.find id world.stuffmap with
     | Ink -> draw_inkline startpos endpos
     | MetaInk -> draw_metainkline startpos endpos
+    | _ -> ()
   in
   let draw_combinator _ (name, pos, ports, _) =
     let dims = combinator_dims pos name (List.length ports) in

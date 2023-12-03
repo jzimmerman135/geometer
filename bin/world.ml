@@ -11,37 +11,37 @@ let empty =
   {
     points = IdMap.empty;
     lines = IdMap.empty;
-    colors = IdMap.empty;
+    stuffmap = IdMap.empty;
     combinators = IdMap.empty;
   }
 
-let add_point id pos ({ points; colors; _ } as world) =
+let add_point id pos ({ points; stuffmap; _ } as world) =
   {
     world with
     points = IdMap.add id pos points;
-    colors = IdMap.add id Ink colors;
+    stuffmap = IdMap.add id Ink stuffmap;
   }
 
-let add_metapoint id pos ({ points; colors; _ } as world) =
+let add_metapoint id pos ({ points; stuffmap; _ } as world) =
   {
     world with
     points = IdMap.add id pos points;
-    colors = IdMap.add id MetaInk colors;
+    stuffmap = IdMap.add id MetaInk stuffmap;
   }
 
-let remove_point id ({ points; colors; lines; _ } as world) =
+let remove_point id ({ points; stuffmap; lines; _ } as world) =
   {
     world with
     points = IdMap.remove id points;
-    colors = IdMap.remove id colors;
+    stuffmap = IdMap.remove id stuffmap;
     lines =
       IdMap.filter
         (fun _ (startid, endid) -> startid <> id && endid <> id)
         lines;
   }
 
-let add_line_internal stuff id (ends : lineends) ({ lines; colors; _ } as world)
-    =
+let add_line_internal stuff id (ends : lineends)
+    ({ lines; stuffmap; _ } as world) =
   let swap (e1, e2) = (e2, e1) in
   if IdMap.exists (fun _ ends' -> ends = ends' || swap ends = ends') lines then
     world
@@ -49,13 +49,17 @@ let add_line_internal stuff id (ends : lineends) ({ lines; colors; _ } as world)
     {
       world with
       lines = IdMap.add id ends lines;
-      colors = IdMap.add id stuff colors;
+      stuffmap = IdMap.add id stuff stuffmap;
     }
 
 let add_line = add_line_internal Ink
 
-let remove_line id ({ lines; colors; _ } as world) =
-  { world with lines = IdMap.remove id lines; colors = IdMap.remove id colors }
+let remove_line id ({ lines; stuffmap; _ } as world) =
+  {
+    world with
+    lines = IdMap.remove id lines;
+    stuffmap = IdMap.remove id stuffmap;
+  }
 
 let add_metaline = add_line_internal MetaInk
 

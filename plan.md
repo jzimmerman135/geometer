@@ -1,5 +1,9 @@
 # Outline
 
+## TODOS
+
+- Get ports and equality working (parallel and perpendicular lines)
+
 ## UI Controls
 
 ## Actions
