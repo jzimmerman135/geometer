@@ -20,6 +20,7 @@ let point_size = 6.0
 let point_highlight_size = 12.0
 let line_width = 3.0
 let line_highlight_width = 5.0
+let faint = Color.create 0x55 0x55 0x55 0x20
 
 (* WORLD *)
 

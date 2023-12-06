@@ -18,7 +18,12 @@ let rec initloop (world, ui) =
   | _ ->
       let open Raylib in
       begin_drawing ();
-      clear_background background;
+      if !Render.background_pts = [] then
+        Render.background_pts :=
+          Render.gen_background_pts
+            (get_screen_width () / 100)
+            (get_screen_height () / 100);
+      Render.draw_background ();
       draw_text
         ("FPS: " ^ Int.to_string (Raylib.get_fps ()))
         10
@@ -36,7 +41,7 @@ let rec loop (world, ui) =
   else
     let open Raylib in
     begin_drawing ();
-    clear_background background;
+    Render.draw_background ();
     Render.draw_fps ();
     if is_key_down Key.U then print_endline (ui_to_string ui);
     if is_key_down Key.H then Render.draw_controls ();
