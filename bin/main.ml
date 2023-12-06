@@ -2,8 +2,9 @@ open Base
 
 let setup () =
   Raylib.init_window 900 506 "Geometer";
-  Raylib.set_target_fps 120
+  Raylib.set_target_fps 800
 
+let shutdown () = Raylib.close_window ()
 let appinit = (World.empty, Ui.empty)
 
 let rec initloop (world, ui) =

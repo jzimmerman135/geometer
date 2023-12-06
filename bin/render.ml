@@ -40,10 +40,7 @@ let background_pts = ref (gen_background_pts 0 0)
 
 let draw_background () =
   clear_background background;
-  let dc (x, y) =
-    print_endline (pos_to_string (x, y));
-    draw_circle (x * 100) (y * 100) 2.0 faint
-  in
+  let dc (x, y) = draw_circle (x * 100) (y * 100) 2.0 faint in
   List.iter dc !background_pts
 
 let combinator_dims (x, y) text outports =

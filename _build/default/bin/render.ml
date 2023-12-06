@@ -30,8 +30,6 @@ let draw_inkpoint (x, y) = draw_circle x y point_size blue
 let draw_metainkpoint (x, y) = draw_circle x y (point_size -. 2.0) red
 
 let gen_background_pts w h =
-  print_endline (Int.to_string w);
-  print_endline (Int.to_string h);
   let rec gen_pts x y =
     if y >= h then []
     else (x, y) :: (if x >= w then gen_pts 0 (y + 1) else gen_pts (x + 1) y)
@@ -42,10 +40,7 @@ let background_pts = ref (gen_background_pts 0 0)
 
 let draw_background () =
   clear_background background;
-  let dc (x, y) =
-    print_endline (pos_to_string (x, y));
-    draw_circle (x * 100) (y * 100) 2.0 faint
-  in
+  let dc (x, y) = draw_circle (x * 100) (y * 100) 2.0 faint in
   List.iter dc !background_pts
 
 let combinator_dims (x, y) text outports =
